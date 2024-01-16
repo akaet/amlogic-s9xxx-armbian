@@ -150,6 +150,11 @@ on:
           - xiaobao
           - zcube1-max
           - zysj
+      minimal_image:
+        description: "Build a minimal image."
+        required: false
+        default: false
+        type: boolean
       armbian_kernel:
         description: "Select kernel version."
         required: false
@@ -241,6 +246,19 @@ jobs:
           sudo -E apt-get -y autoremove --purge
           sudo -E apt-get clean
           sudo timedatectl set-timezone "${TZ}"
+
+          # Add BUILD_MINIMAL settings: build bare CLI image suitable for application deployment.
+          minimal_image="${{ inputs.minimal_image }}"
+          if [[ "${minimal_image}" == "true" ]]; then
+              minimal_option="yes"
+              minimal_tag="_minimal"
+          else
+              minimal_option="no"
+              minimal_tag=""
+          fi
+          echo "ARMBIAN_MINIMAL_TAG=${minimal_tag}" >> ${GITHUB_ENV}
+          echo "ARMBIAN_MINIMAL_OPTION=${minimal_option}" >> ${GITHUB_ENV}
+
           echo "status=success" >> ${GITHUB_OUTPUT}
 
       - name: Download source code
@@ -251,13 +269,13 @@ jobs:
           git clone -q --single-branch --depth=1 --branch=main https://github.com/armbian/build.git build
           echo "status=success" >> ${GITHUB_OUTPUT}
 
-      - name: Compile Armbian [ ${{ inputs.set_release }} ]
+      - name: Compile Armbian [ ${{ inputs.set_release }}${{ env.ARMBIAN_MINIMAL_TAG }} ]
         id: compile
         if: ${{ steps.down.outputs.status }} == 'success' && !cancelled()
         run: |
           # Compile method and parameter description: https://docs.armbian.com/Developer-Guide_Build-Options
           cd build/
-              ./compile.sh RELEASE=${{ inputs.set_release }} BOARD=odroidn2 BRANCH=current BUILD_MINIMAL=no \
+              ./compile.sh RELEASE=${{ inputs.set_release }} BOARD=odroidn2 BRANCH=current BUILD_MINIMAL=${{ env.ARMBIAN_MINIMAL_OPTION }} \
                            BUILD_ONLY=default HOST=armbian BUILD_DESKTOP=no EXPERT=yes KERNEL_CONFIGURE=no \
                            COMPRESS_OUTPUTIMAGE="sha" SHARE_LOG=yes
           echo "status=success" >> ${GITHUB_OUTPUT}
@@ -272,7 +290,7 @@ jobs:
 
           # Output cleaning result information
           df -hT ${PWD}
-          echo "build_tag=Armbian_${{ inputs.set_release }}_${{ inputs.armbian_storage }}_$(date +"%Y.%m")" >> ${GITHUB_OUTPUT}
+          echo "build_tag=Armbian_${{ inputs.set_release }}${{ env.ARMBIAN_MINIMAL_TAG }}_${{ inputs.armbian_storage }}_$(date +"%Y.%m")" >> ${GITHUB_OUTPUT}
           echo "status=success" >> ${GITHUB_OUTPUT}
 
       - name: Upload Armbian image to Release
